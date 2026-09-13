@@ -1,8 +1,12 @@
-import { Ollama } from "ollama";
+import OpenAI from "openai";
 import { z } from "zod";
 import { config } from "./config.js";
 
-const ollama = new Ollama({ host: config.ollamaHost });
+// Works with any OpenAI-compatible endpoint (Groq, OpenAI, OpenRouter, Together...).
+const client = new OpenAI({
+  baseURL: config.llmBaseUrl,
+  apiKey: config.llmApiKey,
+});
 
 export const SEVERITIES = ["critical", "high", "medium", "low", "nit"] as const;
 
@@ -40,8 +44,8 @@ export const ReviewSchema = z.object({
 export type Finding = z.infer<typeof FindingSchema>;
 export type Review = z.infer<typeof ReviewSchema>;
 
-// JSON Schema handed to Ollama's `format` option to constrain generation.
-const REVIEW_JSON_SCHEMA = z.toJSONSchema(ReviewSchema);
+// Embedded in the prompt so the model knows the exact shape to return.
+const SCHEMA_TEXT = JSON.stringify(z.toJSONSchema(ReviewSchema), null, 2);
 
 export interface FileForReview {
   path: string;
@@ -69,7 +73,8 @@ Rules:
 - Keep comments concise and actionable. Reference the exact symbol or value.
 - Write "summary" as a brief, neutral overview a reviewer would leave at the top of the PR.
 
-Respond ONLY with a JSON object matching the required schema. Do not wrap it in markdown fences or add prose.`;
+Respond ONLY with a single JSON object matching this JSON Schema (no markdown fences, no prose):
+${SCHEMA_TEXT}`;
 
 export async function reviewCode(
   files: FileForReview[],
@@ -89,28 +94,31 @@ export async function reviewCode(
 
   const content = parts.join("\n");
 
-  const response = await ollama.chat({
-    model: config.ollamaModel,
+  const completion = await client.chat.completions.create({
+    model: config.llmModel,
+    temperature: 0,
+    response_format: { type: "json_object" },
     messages: [
       { role: "system", content: SYSTEM_PROMPT },
       { role: "user", content },
     ],
-    format: REVIEW_JSON_SCHEMA,
-    options: {
-      temperature: 0,
-      num_ctx: config.ollamaNumCtx,
-    },
   });
 
-  const raw = response.message.content?.trim();
+  const raw = completion.choices[0]?.message.content?.trim();
   if (!raw) {
     console.warn("[reviewer] empty response from model");
     return { summary: "", findings: [] };
   }
 
-  // Ollama constrains output to the schema, but validate anyway — a local model
-  // can still emit something the schema-narrowing missed.
-  const parsed = ReviewSchema.safeParse(JSON.parse(raw));
+  let json: unknown;
+  try {
+    json = JSON.parse(raw);
+  } catch {
+    console.warn("[reviewer] model did not return valid JSON");
+    return { summary: "", findings: [] };
+  }
+
+  const parsed = ReviewSchema.safeParse(json);
   if (!parsed.success) {
     console.warn(
       "[reviewer] model output failed schema validation:",

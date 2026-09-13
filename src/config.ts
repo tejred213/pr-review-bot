@@ -40,11 +40,10 @@ export const config = {
   githubPrivateKey: loadPrivateKey(),
   githubWebhookSecret: required("GITHUB_WEBHOOK_SECRET"),
 
-  // --- Ollama (local model) ---
-  ollamaHost: process.env.OLLAMA_HOST ?? "http://127.0.0.1:11434",
-  ollamaModel: process.env.OLLAMA_MODEL ?? "qwen3:8b",
-  // Ollama defaults to a 4096-token context, too small for real diffs.
-  ollamaNumCtx: Number(process.env.OLLAMA_NUM_CTX ?? 16384),
+  // --- LLM (any OpenAI-compatible provider: Groq, OpenAI, OpenRouter, ...) ---
+  llmBaseUrl: process.env.LLM_BASE_URL ?? "https://api.groq.com/openai/v1",
+  llmApiKey: required("LLM_API_KEY"),
+  llmModel: process.env.LLM_MODEL ?? "llama-3.3-70b-versatile",
 
   port: Number(process.env.PORT ?? 3000),
   skipDrafts: (process.env.SKIP_DRAFTS ?? "true") === "true",
