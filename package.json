@@ -1,0 +1,39 @@
+{
+  "name": "pr-review-bot",
+  "version": "1.0.0",
+  "description": "A GitHub App that reviews pull requests with Claude and posts inline comments.",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "review:local": "tsx src/local.ts"
+  },
+  "keywords": [
+    "github-app",
+    "code-review",
+    "claude",
+    "ai"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@octokit/webhooks": "^14.2.0",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "octokit": "^5.0.5",
+    "ollama": "^0.6.3",
+    "zod": "^4.6.4"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "^26.5.1",
+    "tsx": "^4.23.13",
+    "typescript": "^7.0.2"
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true
+  }
+}
