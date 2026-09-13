@@ -2,7 +2,7 @@
 
 A **GitHub App** that reviews pull requests with an LLM and leaves **inline comments** on the exact lines it's talking about — like a tireless senior engineer on every PR.
 
-Built with Node + TypeScript, the Octokit GitHub App SDK, and any **OpenAI-compatible LLM provider** (Groq by default). Findings come back as JSON validated against a **Zod schema**, so the posting code never guesses at free-form text.
+Built with Node + TypeScript, the Octokit GitHub App SDK, and any **OpenAI-compatible LLM provider** (a local **Ollama** by default; swap in Groq/OpenAI/etc. with three env vars). Findings come back as JSON validated against a **Zod schema**, so the posting code never guesses at free-form text.
 
 ---
 
@@ -75,7 +75,7 @@ Then:
 cp .env.example .env
 ```
 
-Fill in `GITHUB_APP_ID`, `GITHUB_WEBHOOK_SECRET`, the private key (inline or via `GITHUB_PRIVATE_KEY_PATH`), and your LLM provider settings (`LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL`). Defaults point at Groq — get a free key at [console.groq.com](https://console.groq.com).
+Fill in `GITHUB_APP_ID`, `GITHUB_WEBHOOK_SECRET`, and the private key (inline or via `GITHUB_PRIVATE_KEY_PATH`). The LLM settings default to a local **Ollama** — run `ollama serve` and `ollama pull qwen3:8b`, and you need no API key. To use a cloud provider instead, change `LLM_BASE_URL`, `LLM_API_KEY`, and `LLM_MODEL` (see `.env.example`).
 
 ### 3. Install & run
 
@@ -116,7 +116,7 @@ This authenticates as the App's installation and posts a real review, without ne
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `LLM_BASE_URL` | Groq | OpenAI-compatible endpoint. See `.env.example` for OpenAI / OpenRouter / Together / Ollama URLs. |
+| `LLM_BASE_URL` | Ollama (`…:11434/v1`) | OpenAI-compatible endpoint. See `.env.example` for Groq / OpenAI / OpenRouter / Together URLs. |
 | `LLM_API_KEY` | — | API key for your provider (required). |
 | `LLM_MODEL` | `llama-3.3-70b-versatile` | Review model. Any model your provider serves. |
 | `SKIP_DRAFTS` | `true` | Don't review draft PRs. |
@@ -129,11 +129,11 @@ Generated/vendored paths (lockfiles, `dist/`, `.min.js`, etc.) are skipped — s
 
 The bot talks the OpenAI API, so any compatible provider works — just change `LLM_BASE_URL`, `LLM_API_KEY`, and `LLM_MODEL`:
 
-- **Groq** (default) — fast, generous free tier, runs open models like Llama 3.3 70B.
+- **Ollama** (default) — fully local/offline, no API key (`http://127.0.0.1:11434/v1`).
+- **Groq** — fast, generous free tier, runs open models like Llama 3.3 70B.
 - **OpenAI** — top quality, paid.
 - **OpenRouter** — one key, many models (some free).
 - **Together / Fireworks / DeepInfra** — cheap pay-per-token open models.
-- **Ollama** — fully local/offline (`http://127.0.0.1:11434/v1`).
 
 ## Deploy
 

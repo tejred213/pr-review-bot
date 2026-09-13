@@ -40,10 +40,12 @@ export const config = {
   githubPrivateKey: loadPrivateKey(),
   githubWebhookSecret: required("GITHUB_WEBHOOK_SECRET"),
 
-  // --- LLM (any OpenAI-compatible provider: Groq, OpenAI, OpenRouter, ...) ---
-  llmBaseUrl: process.env.LLM_BASE_URL ?? "https://api.groq.com/openai/v1",
-  llmApiKey: required("LLM_API_KEY"),
-  llmModel: process.env.LLM_MODEL ?? "llama-3.3-70b-versatile",
+  // --- LLM (any OpenAI-compatible provider) ---
+  // Defaults to a local Ollama; override for a cloud provider (Groq, OpenAI, ...).
+  llmBaseUrl: process.env.LLM_BASE_URL ?? "http://127.0.0.1:11434/v1",
+  // Local Ollama ignores the key but the client requires a non-empty value.
+  llmApiKey: process.env.LLM_API_KEY ?? "ollama",
+  llmModel: process.env.LLM_MODEL ?? "qwen3:8b",
 
   port: Number(process.env.PORT ?? 3000),
   skipDrafts: (process.env.SKIP_DRAFTS ?? "true") === "true",
