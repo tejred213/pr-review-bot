@@ -44,8 +44,9 @@ export const ReviewSchema = z.object({
 export type Finding = z.infer<typeof FindingSchema>;
 export type Review = z.infer<typeof ReviewSchema>;
 
-// Embedded in the prompt so the model knows the exact shape to return.
-const SCHEMA_TEXT = JSON.stringify(z.toJSONSchema(ReviewSchema), null, 2);
+// Passed to the provider as a schema-constrained response format so the model
+// is forced to emit an instance of this shape (not the schema itself).
+const REVIEW_JSON_SCHEMA = z.toJSONSchema(ReviewSchema);
 
 export interface FileForReview {
   path: string;
@@ -73,8 +74,45 @@ Rules:
 - Keep comments concise and actionable. Reference the exact symbol or value.
 - Write "summary" as a brief, neutral overview a reviewer would leave at the top of the PR.
 
-Respond ONLY with a single JSON object matching this JSON Schema (no markdown fences, no prose):
-${SCHEMA_TEXT}`;
+Respond ONLY with a single JSON object that has a "summary" string and a "findings" array (no markdown fences, no prose). If the change is clean, use an empty findings array.`;
+
+/**
+ * Build the `response_format` for the configured provider. Ollama/OpenAI honor
+ * schema-constrained decoding; Gemini/Groq are happier with generic JSON mode.
+ * Returns `undefined` when the provider should get no `response_format` at all.
+ */
+function buildResponseFormat() {
+  switch (config.llmJsonMode) {
+    case "none":
+      return undefined;
+    case "json_object":
+      return { type: "json_object" as const };
+    case "json_schema":
+    default:
+      return {
+        type: "json_schema" as const,
+        json_schema: {
+          name: "review",
+          strict: config.llmStrictSchema,
+          schema: REVIEW_JSON_SCHEMA,
+        },
+      };
+  }
+}
+
+/**
+ * Pull the JSON payload out of a model response. In non-schema modes some
+ * models wrap the object in a ```json ... ``` fence or add stray prose; strip
+ * the fence and, failing that, fall back to the outermost {...} span.
+ */
+function extractJson(text: string): string {
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+  if (fenced) return fenced[1].trim();
+  const first = text.indexOf("{");
+  const last = text.lastIndexOf("}");
+  if (first !== -1 && last > first) return text.slice(first, last + 1);
+  return text;
+}
 
 export async function reviewCode(
   files: FileForReview[],
@@ -94,28 +132,44 @@ export async function reviewCode(
 
   const content = parts.join("\n");
 
+  const responseFormat = buildResponseFormat();
   const completion = await client.chat.completions.create({
     model: config.llmModel,
     temperature: 0,
-    response_format: { type: "json_object" },
+    ...(responseFormat && { response_format: responseFormat }),
     messages: [
       { role: "system", content: SYSTEM_PROMPT },
       { role: "user", content },
     ],
   });
 
-  const raw = completion.choices[0]?.message.content?.trim();
-  if (!raw) {
+  const rawContent = completion.choices[0]?.message.content?.trim();
+  if (process.env.DEBUG_RAW)
+    console.error("[reviewer][DEBUG_RAW]\n", rawContent, "\n[/DEBUG_RAW]");
+  if (!rawContent) {
     console.warn("[reviewer] empty response from model");
     return { summary: "", findings: [] };
   }
 
   let json: unknown;
   try {
-    json = JSON.parse(raw);
+    json = JSON.parse(extractJson(rawContent));
   } catch {
     console.warn("[reviewer] model did not return valid JSON");
     return { summary: "", findings: [] };
+  }
+
+  // Some models echo a JSON Schema instead of an instance, nesting the real
+  // data under "properties". Unwrap that so the review isn't silently lost.
+  if (
+    json &&
+    typeof json === "object" &&
+    !("summary" in json) &&
+    "properties" in json &&
+    (json as { properties?: unknown }).properties &&
+    typeof (json as { properties: unknown }).properties === "object"
+  ) {
+    json = (json as { properties: unknown }).properties;
   }
 
   const parsed = ReviewSchema.safeParse(json);
